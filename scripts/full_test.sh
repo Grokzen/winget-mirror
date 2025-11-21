@@ -40,7 +40,7 @@ echo "Step 5: Refresh synced"
 invoke refresh-synced
 
 echo "Step 6: Purge package"
-invoke purge-package Notepad++
+echo "yes" | invoke purge-package Notepad++
 
 echo "Full test sequence completed successfully!"
 
