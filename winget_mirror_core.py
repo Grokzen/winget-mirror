@@ -34,21 +34,21 @@ def load_config_and_state():
     """Load and return config and state from files, or None if not found."""
     config_path = Path('config.json')
     state_path = Path('state.json')
-    
+
     if not config_path.exists():
         print("config.json not found. Run 'invoke init --path=<path>' first.")
         return None, None
-    
+
     if not state_path.exists():
         print("state.json not found. Run 'invoke init --path=<path>' first.")
         return None, None
-    
+
     with open(config_path) as f:
         config = json.load(f)
-    
+
     with open(state_path) as f:
         state = json.load(f)
-    
+
     return config, state
 
 def get_matching_publishers(mirror_dir, publisher):
@@ -72,20 +72,20 @@ def process_package(package_id, mirror_dir, downloads_dir, downloaded, repo):
     except ValueError:
         print(f"Warning: Invalid package_id format: {package_id}")
         return False
-    
+
     manifests_dir = mirror_dir / 'manifests'
     first_letter = pub[0].lower()
     publisher_path = manifests_dir / first_letter / pub
     package_path = publisher_path / pkg
-    
+
     if not package_path.is_dir():
         print(f"Warning: Package directory not found for {package_id}")
         return False
-    
+
     versions = [p.name for p in package_path.iterdir() if p.is_dir()]
     if not versions:
         return False
-    
+
     # Filter out invalid version strings
     valid_versions = []
     for v in versions:
@@ -94,22 +94,22 @@ def process_package(package_id, mirror_dir, downloads_dir, downloaded, repo):
             valid_versions.append(v)
         except:
             continue
-    
+
     if not valid_versions:
         return False
-    
+
     latest_version = max(valid_versions, key=parse_version_safe)
     yaml_path = package_path / latest_version / f'{pub}.{pkg}.yaml'
     if not yaml_path.exists():
         return False
-    
+
     with open(yaml_path) as f:
         manifest = yaml.safe_load(f)
-    
+
     if 'ManifestVersion' not in manifest or version.parse(manifest['ManifestVersion']) < version.parse('1.0.0'):
         print(f"Skipping {pkg} due to unsupported ManifestVersion {manifest.get('ManifestVersion')}")
         return False
-    
+
     # Load installers from separate file if it exists (for split manifests)
     installer_yaml_path = package_path / latest_version / f'{pub}.{pkg}.installer.yaml'
     if installer_yaml_path.exists():
@@ -118,10 +118,10 @@ def process_package(package_id, mirror_dir, downloads_dir, downloaded, repo):
         installers = installer_manifest.get('Installers', [])
     else:
         installers = manifest.get('Installers', [])
-    
+
     download_dir = downloads_dir / pub / pkg / latest_version
     download_dir.mkdir(parents=True, exist_ok=True)
-    
+
     # Initialize package entry if not exists
     if package_id not in downloaded:
         downloaded[package_id] = {
@@ -130,15 +130,15 @@ def process_package(package_id, mirror_dir, downloads_dir, downloaded, repo):
             'files': {},
             'timestamp': None
         }
-    
+
     downloaded_new = False
-    
+
     for installer in installers:
         url = installer['InstallerUrl']
         sha256 = installer.get('InstallerSha256')
         filename = Path(url).name
         filepath = download_dir / filename
-        
+
         if filepath.exists():
             # File already exists, add to files if not already
             if filename not in downloaded[package_id]['files']:
@@ -146,13 +146,13 @@ def process_package(package_id, mirror_dir, downloads_dir, downloaded, repo):
                     computed_hash = hashlib.sha256(f.read()).hexdigest()
                 downloaded[package_id]['files'][filename] = computed_hash
             continue
-        
+
         downloaded_new = True
         print(f"Downloading {url} to {filepath}")
         response = requests.get(url, stream=True)
         response.raise_for_status()
         total_size = int(response.headers.get('content-length', 0))
-        
+
         with open(filepath, 'wb') as f, tqdm(
             desc=filename,
             total=total_size,
@@ -163,17 +163,17 @@ def process_package(package_id, mirror_dir, downloads_dir, downloaded, repo):
             for data in response.iter_content(chunk_size=1024):
                 size = f.write(data)
                 bar.update(size)
-        
+
         # Validate hash
         with open(filepath, 'rb') as f:
             computed_hash = hashlib.sha256(f.read()).hexdigest()
-        
+
         if sha256 and computed_hash != sha256.lower():
             print(f"Warning: Hash mismatch for {filepath}, expected {sha256}, got {computed_hash}")
             # Still add the file to allow the mirror to work
-        
+
         downloaded[package_id]['files'][filename] = computed_hash
-    
+
     # Set timestamp after processing all installers
     if downloaded[package_id]['files']:
         downloaded[package_id]['timestamp'] = datetime.datetime.now().isoformat()
@@ -192,19 +192,19 @@ class WingetMirrorManager:
     def __init__(self, config_path='config.json', state_path='state.json'):
         self.config_path = Path(config_path)
         self.state_path = Path(state_path)
-        
+
         if not self.config_path.exists():
             raise ValueError(f"Config file not found: {self.config_path}")
-        
+
         if not self.state_path.exists():
             raise ValueError(f"State file not found: {self.state_path}")
-        
+
         with open(self.config_path) as f:
             self.config = json.load(f)
-        
+
         with open(self.state_path) as f:
             self.state = json.load(f)
-        
+
         self.path = Path(self.state['path'])
         self.mirror_dir = self.path / self.config['mirror_dir']
         self.downloads_dir = self.path / 'downloads'
@@ -213,45 +213,45 @@ class WingetMirrorManager:
     @classmethod
     def initialize(cls, path):
         """Initialize a new mirror usage at the specified path.
-        
+
         Creates the project directory, config.json, and state.json if they don't exist.
         If already initialized at the path, does nothing.
-        
+
         Args:
             path: Absolute or relative path to the project directory.
-        
+
         Returns:
             str: Path to the initialized project directory.
         """
         project_path = Path(path)
         if not project_path.is_absolute():
             project_path = project_path.resolve()
-        
+
         project_path.mkdir(parents=True, exist_ok=True)
-        
+
         config_path = project_path / 'config.json'
         state_path = project_path / 'state.json'
-        
+
         if config_path.exists():
             print(f"Already initialized at {project_path}")
             return str(project_path)
-        
+
         config = cls.DEFAULT_CONFIG.copy()
         state = {
             "path": str(project_path),
             "last_sync": None
         }
-        
+
         with open(config_path, 'w') as f:
             json.dump(config, f, indent=4)
-        
+
         with open(state_path, 'w') as f:
             json.dump(state, f, indent=4)
-        
+
         print(f"Initialized mirror at {project_path}")
         print(f"Config: {config_path}")
         print(f"State: {state_path}")
-        
+
         return str(project_path)
 
     def paths(self):
@@ -305,7 +305,7 @@ class WingetMirrorManager:
                 f.write('manifests/\n')
             # Checkout with sparse
             repo.git.checkout(self.config['revision'])
-        
+
         print(f"Synced repo to {self.config['revision']} at {repo_path}")
         self.repo = repo
         return repo
@@ -322,10 +322,10 @@ class WingetPackage:
         first_letter = self.pub[0].lower()
         publisher_path = manifests_dir / first_letter / self.pub
         package_path = publisher_path / self.pkg
-        
+
         if not package_path.is_dir():
             return None
-        
+
         versions = [p.name for p in package_path.iterdir() if p.is_dir()]
         valid_versions = []
         for v in versions:
@@ -334,10 +334,10 @@ class WingetPackage:
                 valid_versions.append(v)
             except:
                 continue
-        
+
         if not valid_versions:
             return None
-        
+
         return max(valid_versions, key=parse_version_safe)
 
     def download(self):
