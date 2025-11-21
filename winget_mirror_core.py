@@ -186,7 +186,8 @@ class WingetMirrorManager:
     DEFAULT_CONFIG = {
         "repo_url": "https://github.com/microsoft/winget-pkgs",
         "revision": "master",
-        "mirror_dir": "mirror"
+        "mirror_dir": "mirror",
+        "server_url": None
     }
 
     def __init__(self, config_path='config.json', state_path='state.json'):
@@ -309,6 +310,73 @@ class WingetMirrorManager:
         print(f"Synced repo to {self.config['revision']} at {repo_path}")
         self.repo = repo
         return repo
+
+    def patch_repo(self, server_url, output_dir):
+        """Create patched manifests with corrected InstallerURL paths for downloaded packages.
+
+        Copies manifest files for all downloaded packages to the output directory,
+        preserving the same folder structure, and patches InstallerURL to point to
+        the local mirror's downloads folder served by the specified server URL.
+
+        Args:
+            server_url: Base server URL where downloads will be served (e.g., 'https://mirror.example.com')
+            output_dir: Directory to output the patched manifests
+
+        Returns:
+            int: Number of packages patched
+        """
+        if not self.state.get('downloads'):
+            print("No downloaded packages found in state.json")
+            return 0
+
+        output_path = Path(output_dir)
+        output_path.mkdir(parents=True, exist_ok=True)
+
+        patched_count = 0
+
+        for package_id, package_info in self.state['downloads'].items():
+            pub, pkg = package_id.split('.', 1)
+            version = package_info['version']
+
+            # Source manifest directory
+            first_letter = pub[0].lower()
+            source_manifest_dir = self.mirror_dir / 'manifests' / first_letter / pub / pkg / version
+
+            if not source_manifest_dir.exists():
+                print(f"Warning: Source manifest directory not found for {package_id}: {source_manifest_dir}")
+                continue
+
+            # Target manifest directory
+            target_manifest_dir = output_path / 'manifests' / first_letter / pub / pkg / version
+            target_manifest_dir.mkdir(parents=True, exist_ok=True)
+
+            # Copy and patch manifest files
+            for manifest_file in source_manifest_dir.glob('*.yaml'):
+                target_file = target_manifest_dir / manifest_file.name
+
+                with open(manifest_file) as f:
+                    manifest = yaml.safe_load(f)
+
+                # Patch installer URLs if this is an installer manifest
+                if manifest.get('ManifestType') == 'installer' and 'Installers' in manifest:
+                    for installer in manifest['Installers']:
+                        if 'InstallerUrl' in installer:
+                            original_url = installer['InstallerUrl']
+                            filename = Path(original_url).name
+                            # Construct new URL: server_url + /downloads/pub/pkg/version/filename
+                            new_url = f"{server_url.rstrip('/')}/downloads/{pub}/{pkg}/{version}/{filename}"
+                            installer['InstallerUrl'] = new_url
+                            print(f"Patched {package_id}: {original_url} -> {new_url}")
+
+                # Write patched manifest
+                with open(target_file, 'w') as f:
+                    yaml.dump(manifest, f, default_flow_style=False, sort_keys=False)
+
+            patched_count += 1
+            print(f"Patched manifests for {package_id}")
+
+        print(f"Successfully patched {patched_count} packages")
+        return patched_count
 
 class WingetPackage:
     def __init__(self, manager, package_id):

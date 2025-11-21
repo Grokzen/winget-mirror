@@ -36,10 +36,25 @@ invoke sync Notepad++
 echo "Step 4: Validate hash"
 invoke validate-hash
 
-echo "Step 5: Refresh synced"
+echo "Step 5: Patch manifests"
+invoke patch-repo --server-url="https://test-mirror.example.com" --output-dir="./patched-manifests"
+
+echo "Step 6: Verify patched manifests"
+if [ ! -d "./patched-manifests/manifests" ]; then
+    echo "Error: Patched manifests directory not created"
+    exit 1
+fi
+# Check if at least one manifest file exists
+if ! find "./patched-manifests/manifests" -name "*.yaml" | grep -q .; then
+    echo "Error: No manifest files found in patched directory"
+    exit 1
+fi
+echo "Patched manifests verified successfully"
+
+echo "Step 7: Refresh synced"
 invoke refresh-synced
 
-echo "Step 6: Purge package"
+echo "Step 8: Purge package"
 echo "yes" | invoke purge-package Notepad++
 
 echo "Full test sequence completed successfully!"

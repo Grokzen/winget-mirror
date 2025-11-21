@@ -1,20 +1,14 @@
 import json
-import yaml
-import requests
-import hashlib
 import datetime
 import sys
 import os
-from pathlib import Path
 from invoke import task
 
 # Add current directory to path for imports
 sys.path.insert(0, os.path.join(os.getcwd(), '..'))
 
 from winget_mirror_core import (
-    GitProgress, parse_version_safe, load_config_and_state,
-    get_matching_publishers, process_package,
-    WingetMirrorManager, WingetPackage
+    parse_version_safe, WingetMirrorManager
 )
 
 # Check Python version
@@ -400,4 +394,45 @@ def search(c, publisher):
 
     for pkg_id, status, ver, ts in package_data:
         print(f"{pkg_id:<{max_pkg_len}}  {status:<{max_status_len}}  {ver:<10}  {ts:<17}")
+
+@task
+def patch_repo(c, server_url, output_dir):
+    """Create patched manifests with corrected InstallerURL paths for downloaded packages.
+
+    Copies manifest files for all downloaded packages to the output directory,
+    preserving the same folder structure, and patches InstallerURL to point to
+    the local mirror's downloads folder served by the specified server URL.
+
+    This command must be run after downloading packages using 'invoke sync'.
+
+    Args:
+        server_url: Base server URL where downloads will be served (e.g., 'https://mirror.example.com')
+        output_dir: Directory to output the patched manifests
+
+    Example:
+        invoke patch-repo --server-url="https://mirror.example.com" --output-dir="./patched-manifests"
+    """
+    # Validate server URL
+    if not server_url.startswith(('http://', 'https://')):
+        print("Error: server_url must start with http:// or https://")
+        return
+
+    try:
+        from urllib.parse import urlparse
+        parsed = urlparse(server_url)
+        if not parsed.netloc:
+            print("Error: server_url must be a valid URL")
+            return
+    except ImportError:
+        print("Error: Unable to parse URL")
+        return
+
+    manager = WingetMirrorManager()
+
+    if not manager.state.get('downloads'):
+        print("No downloaded packages found in state.json. Run 'invoke sync' first.")
+        return
+
+    manager.patch_repo(server_url, output_dir)
+    print(f"Patched manifests created in {output_dir}")
 

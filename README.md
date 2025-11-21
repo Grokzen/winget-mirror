@@ -84,6 +84,7 @@ invoke <task-name> [arguments]
 - **`validate-hash [--output=json]`**: Validate SHA256 hashes of downloaded files.
 - **`purge-package <publisher>`**: Remove downloaded packages matching the publisher filter.
 - **`purge-all-packages`**: Remove all downloaded packages (with confirmation).
+- **`patch-repo --server-url=<url> --output-dir=<dir>`**: Create patched manifests with corrected InstallerURL paths.
 
 ## Configuration
 
@@ -92,7 +93,8 @@ invoke <task-name> [arguments]
   {
     "repo_url": "https://github.com/microsoft/winget-pkgs",
     "revision": "master",
-    "mirror_dir": "mirror"
+    "mirror_dir": "mirror",
+    "server_url": null
   }
   ```
 - **`state.json`**: Tracks downloaded packages and sync state
@@ -162,6 +164,136 @@ invoke purge-all-packages
 invoke validate-hash --output=json
 ```
 
+### Patch Manifests
+```bash
+# Create patched manifests for self-hosted mirror
+invoke patch-repo --server-url="https://mirror.example.com" --output-dir="./patched-manifests"
+```
+
+## Manifest Patching
+
+The `patch-repo` command is used to create modified winget manifest files that point to your local mirror instead of the original download URLs. This enables you to host your own winget package repository with custom installer URLs.
+
+### Purpose
+
+Winget packages contain `InstallerUrl` fields that point to the original download locations (e.g., GitHub releases, vendor websites). When creating a local mirror, you need to update these URLs to point to your mirrored files so that winget clients can download from your server instead of the original sources.
+
+### How to Run
+
+Run the command from your mirror directory (where `config.json` and `state.json` are located):
+
+```bash
+invoke patch-repo --server-url="https://your-mirror-domain.com" --output-dir="./patched-manifests"
+```
+
+### Arguments
+
+- **`--server-url`**: The base URL of your mirror server where the downloads folder will be hosted. Must be a valid HTTP or HTTPS URL (e.g., `https://mirror.example.com` or `https://winget.mydomain.com`). This URL will be prepended to the download paths.
+- **`--output-dir`**: Directory where the patched manifest files will be created. The command will create this directory if it doesn't exist. The folder structure will mirror the original manifests directory.
+
+### What It Does
+
+1. **Reads downloaded packages**: Scans `state.json` for all packages that have been downloaded and verified.
+2. **Copies manifest structure**: Recreates the exact same folder hierarchy as the original `mirror/manifests/` directory.
+3. **Patches URLs**: For each installer manifest (`.installer.yaml` files), replaces `InstallerUrl` fields with new URLs pointing to your mirror.
+4. **Preserves metadata**: All other manifest data (version info, hashes, dependencies, etc.) remains unchanged.
+
+### URL Transformation
+
+Original URL in manifest:
+```
+https://github.com/vendor/package/releases/download/v1.0/installer.exe
+```
+
+Becomes:
+```
+https://your-mirror-domain.com/downloads/Vendor/Package/1.0/installer.exe
+```
+
+The path structure matches your local `downloads/` folder:
+```
+downloads/
+└── Vendor/
+    └── Package/
+        └── 1.0/
+            └── installer.exe
+```
+
+### NGINX Static File Hosting
+
+To serve the patched manifests and downloads via NGINX:
+
+1. **Host the patched manifests**: Copy the contents of your `--output-dir` to a web-accessible directory on your NGINX server.
+
+2. **Host the downloads folder**: Ensure your `downloads/` folder is also web-accessible at the same domain.
+
+3. **NGINX Configuration Example**:
+   ```nginx
+   server {
+       listen 80;
+       server_name your-mirror-domain.com;
+
+       # Serve patched manifests
+       location /manifests/ {
+           alias /path/to/patched-manifests/manifests/;
+           autoindex on;  # Optional: enable directory listing
+       }
+
+       # Serve downloads
+       location /downloads/ {
+           alias /path/to/mirror/downloads/;
+           autoindex off;  # Disable directory listing for security
+       }
+
+       # Optional: Add caching headers
+       location ~* \.(exe|msi|zip)$ {
+           add_header Cache-Control "public, max-age=31536000";  # 1 year
+       }
+   }
+   ```
+
+4. **Winget Client Configuration**: Configure winget to use your mirror by setting the source URL to point to your manifests directory:
+   ```bash
+   winget source add --name "My Mirror" --arg "https://your-mirror-domain.com/manifests"
+   ```
+
+### Requirements
+
+- Run `invoke sync-repo` and `invoke sync` first to download packages
+- Valid HTTP/HTTPS server URL
+- Sufficient disk space for copied manifests
+- NGINX or compatible web server for hosting
+
+### Output Usage
+
+The patched manifests in `--output-dir` are ready to be served by your web server. They can be used to:
+
+- Create a private winget package source
+- Provide offline package access for air-gapped networks
+- Reduce bandwidth costs by serving from local infrastructure
+- Ensure package availability even if original sources go down
+
+### Example Workflow
+
+```bash
+# 1. Initialize and sync packages
+invoke init --path=./my-mirror
+cd my-mirror
+invoke sync-repo
+invoke sync Microsoft
+invoke sync Notepad++
+
+# 2. Patch manifests for your domain
+invoke patch-repo --server-url="https://winget.company.com" --output-dir="./patched"
+
+# 3. Deploy to NGINX
+# Copy ./patched/manifests/ to /var/www/winget/manifests/
+# Ensure ./downloads/ is accessible at /var/www/winget/downloads/
+
+# 4. Configure winget clients
+winget source add --name "Company Mirror" --arg "https://winget.company.com/manifests"
+```
+
 ## Testing
 
 ### Local Testing
@@ -184,7 +316,7 @@ This repository includes GitHub Actions CI that runs on every push and pull requ
 
 - **Trigger**: Push to any branch, pull requests
 - **Environment**: Ubuntu latest with Python 3.11, 3.12, 3.13
-- **Tests**: Full sequence using Notepad++ package
+- **Tests**: Full sequence using Notepad++ package including manifest patching
 - **Workflow**: `.github/workflows/ci.yml`
 
 The CI automatically runs the complete test suite, which handles test directory creation, execution, and cleanup.
