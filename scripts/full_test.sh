@@ -25,22 +25,22 @@ cd $TEST_DIR
 echo "Starting full test sequence..."
 
 echo "Step 1: Sync repo"
-invoke -f ../tasks.py sync-repo
+invoke sync-repo
 
 echo "Step 2: Search packages"
-invoke -f ../tasks.py search Notepad++
+invoke search Notepad++
 
 echo "Step 3: Sync package"
-invoke -f ../tasks.py sync Notepad++
+invoke sync Notepad++
 
 echo "Step 4: Validate hash"
-invoke -f ../tasks.py validate-hash
+invoke validate-hash
 
 echo "Step 5: Refresh synced"
-invoke -f ../tasks.py refresh-synced
+invoke refresh-synced
 
 echo "Step 6: Purge package"
-invoke -f ../tasks.py purge-package Notepad++
+invoke purge-package Notepad++
 
 echo "Full test sequence completed successfully!"
 

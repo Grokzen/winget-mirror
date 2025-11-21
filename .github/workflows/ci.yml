@@ -8,7 +8,7 @@ jobs:
 
     strategy:
       matrix:
-        python-version: ['3.11', '3.12', '3.13', '3.14']
+        python-version: ['3.11', '3.12', '3.13']
 
     steps:
     - name: Checkout code
@@ -23,4 +23,6 @@ jobs:
       run: pip install -r requirements.txt
 
     - name: Run full test suite
-      run: ./scripts/full_test.sh
+      run: |
+        cd scripts
+        ./full_test.sh

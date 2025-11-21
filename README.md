@@ -50,28 +50,28 @@ A Python-based tool for mirroring and downloading Microsoft Winget packages from
 
 3. **Sync the repository**:
    ```
-   invoke -f /path/to/winget-mirror/tasks.py sync-repo
+   invoke sync-repo
    ```
    Downloads package manifests using sparse checkout.
 
 4. **Download packages**:
    ```
-   invoke -f /path/to/winget-mirror/tasks.py sync Microsoft
+   invoke sync Microsoft
    ```
    Downloads the latest Microsoft packages.
 
 5. **Validate downloads**:
    ```
-   invoke -f /path/to/winget-mirror/tasks.py validate-hash
+   invoke validate-hash
    ```
 
 ## Usage
 
-All tasks are run using Invoke. Since `tasks.py` is located in the project root, use the `-f` flag to specify the tasks file when running from the mirror directory.
+All tasks are run using Invoke. Invoke automatically finds `tasks.py` in the current directory or parent directories.
 
 ### General Syntax
 ```
-invoke -f /path/to/winget-mirror/tasks.py <task-name> [arguments]
+invoke <task-name> [arguments]
 ```
 
 ### Available Tasks
@@ -123,43 +123,43 @@ invoke init --path=./my-mirror
 cd my-mirror
 
 # Sync repository (first time may take a few minutes due to sparse checkout)
-invoke -f ../tasks.py sync-repo
+invoke sync-repo
 ```
 
 ### Download Packages
 ```bash
 # Download all Microsoft packages
-invoke -f ../tasks.py sync Microsoft
+invoke sync Microsoft
 
 # Download specific package
-invoke -f ../tasks.py sync Spotify/Spotify
+invoke sync Spotify/Spotify
 
 # Download all Spotify packages
-invoke -f ../tasks.py sync Spotify
+invoke sync Spotify
 ```
 
 ### Search and Manage
 ```bash
 # Search for Microsoft packages
-invoke -f ../tasks.py search Microsoft
+invoke search Microsoft
 
 # Validate all downloads
-invoke -f ../tasks.py validate-hash
+invoke validate-hash
 
 # Update all downloaded packages
-invoke -f ../tasks.py refresh-synced
+invoke refresh-synced
 
 # Remove Microsoft packages
-invoke -f ../tasks.py purge-package Microsoft
+invoke purge-package Microsoft
 
 # Remove all packages
-invoke -f ../tasks.py purge-all-packages
+invoke purge-all-packages
 ```
 
 ### JSON Output
 ```bash
 # Get validation results as JSON
-invoke -f ../tasks.py validate-hash --output=json
+invoke validate-hash --output=json
 ```
 
 ## Testing
@@ -183,7 +183,7 @@ make full
 This repository includes GitHub Actions CI that runs on every push and pull request:
 
 - **Trigger**: Push to any branch, pull requests
-- **Environment**: Ubuntu latest with Python 3.11
+- **Environment**: Ubuntu latest with Python 3.11, 3.12, 3.13
 - **Tests**: Full sequence using Notepad++ package
 - **Workflow**: `.github/workflows/ci.yml`
 
@@ -215,7 +215,7 @@ your-mirror/
 
 ## Troubleshooting
 
-- **"No idea what 'task' is!"**: Ensure you're using the correct `-f` path to `tasks.py`.
+- **"No idea what 'task' is!"**: Ensure `tasks.py` is in the current or parent directories.
 - **Git errors**: Ensure Git is installed and accessible.
 - **Permission errors**: Run with appropriate permissions for file operations.
 - **Validation failures**: Check internet connection and re-run sync if needed.
